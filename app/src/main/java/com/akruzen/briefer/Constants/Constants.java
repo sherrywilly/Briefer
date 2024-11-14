@@ -7,11 +7,18 @@ package com.akruzen.briefer.Constants;
 
 public class Constants {
 
-    public static final String[] allowedFiles = {"application/pdf", "text/plain"};
+    public static final String[] allowedFiles = {"application/pdf",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/csv",
+            "text/plain",};
 
     public static final int FILE_TYPE_UNKNOWN = -1;
     public static final int FILE_TYPE_PDF = 1;
     public static final int FILE_TYPE_TXT = 2;
+    public static final int FILE_TYPE_CSV = 3;
+    public static final int FILE_TYPE_XLS = 4;
+    public static final int FILE_TYPE_XLSX = 5;
 
     public static final String FILE_INTENT_EXTRA = "fileIntentExtra";
     public static final String FILE_EXTENSION_INTENT_EXTRA = "fileExtensionExtra";

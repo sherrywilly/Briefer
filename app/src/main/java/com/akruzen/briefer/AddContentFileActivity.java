@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.room.Room;
+
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -17,27 +18,37 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import com.akruzen.briefer.Constants.Constants;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.parser.PdfTextExtractor;
 import com.akruzen.briefer.db.AppDatabase;
 import com.akruzen.briefer.db.Topic;
 import com.akruzen.briefer.db.TopicDao;
+import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvValidationException;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AddContentFileActivity extends AppCompatActivity {
+
+    private static final String TAG = "AddContentFileActivity";
 
     Uri selectedFileUri;
     DocumentFile documentFile;
@@ -57,11 +68,9 @@ public class AddContentFileActivity extends AppCompatActivity {
     AppDatabase db;
 
     public void saveFABClicked(View view) {
-        // Save the file if content is available
         if (fileName != null && !extractedContent.isEmpty()) {
-            saveTopicToDatabase(fileName, extractedContent); // Save the topic with file name and content
-//            Toast.makeText(this, "Topic saved", Toast.LENGTH_SHORT).show();
-
+            String title = questionFileTextInputEditText.getText().toString();
+            saveTopicToDatabase(title.isEmpty() ? fileName : title, extractedContent);
         } else {
             Toast.makeText(this, "No content to save", Toast.LENGTH_SHORT).show();
         }
@@ -84,7 +93,8 @@ public class AddContentFileActivity extends AppCompatActivity {
             );
             topicDao.insertTopic(topic);
 
-            Log.i("Database", "Topic saved with title: " + title);
+            Log.i(TAG, "Topic saved with title: " + title);
+            Toast.makeText(this, "Content saved successfully", Toast.LENGTH_SHORT).show();
             finish(); // Close the activity after saving
         } catch (PackageManager.NameNotFoundException e) {
             Toast.makeText(this, "Error saving topic to database", Toast.LENGTH_SHORT).show();
@@ -113,7 +123,6 @@ public class AddContentFileActivity extends AppCompatActivity {
         topicDao = db.topicDao();
         tinyDB = new TinyDB(this);
 
-
         // Method Calls
         getIntentExtras();
         setTexts();
@@ -122,6 +131,10 @@ public class AddContentFileActivity extends AppCompatActivity {
     private void getIntentExtras() {
         selectedFileUri = Objects.requireNonNull(getIntent().getExtras()).getParcelable(Constants.FILE_INTENT_EXTRA);
         fileExtension = Objects.requireNonNull(getIntent().getExtras()).getString(Constants.FILE_EXTENSION_INTENT_EXTRA);
+
+        // Get file name
+        documentFile = DocumentFile.fromSingleUri(this, selectedFileUri);
+        fileName = documentFile != null ? documentFile.getName() : "Unknown File";
     }
 
     private void setTexts() {
@@ -132,70 +145,126 @@ public class AddContentFileActivity extends AppCompatActivity {
         builder.setCancelable(false);
         builder.setNegativeButton("Dismiss", (dialog, which) -> {
             dialog.dismiss();
-            executor.shutdownNow(); // Stop the thread when tapped on dismiss
+            executor.shutdownNow();
         });
         AlertDialog dialog = builder.create();
         handler.post(dialog::show);
 
         executor.execute(() -> {
             try {
-                StringBuilder extractedText = new StringBuilder();
-                reader = setPdfReader();
-                int pageCount = reader.getNumberOfPages();
-                for (int i = 0; i < pageCount; i++) {
-                    extractedText.append(PdfTextExtractor.getTextFromPage(reader, i + 1).trim()).append("\n");
+                contentResolver = getContentResolver();
+                inputStream = contentResolver.openInputStream(selectedFileUri);
+
+                if ("PDF".equalsIgnoreCase(fileExtension)) {
+                    extractPdfContent();
+                } else if ("XLS".equalsIgnoreCase(fileExtension) || "XLSX".equalsIgnoreCase(fileExtension)) {
+                    extractExcelContent();
+                } else if ("CSV".equalsIgnoreCase(fileExtension)) {
+                    extractCSVContent();
+                } else if ("TXT".equalsIgnoreCase(fileExtension)) {
+                    extractTextContent();
+                } else {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "Unsupported file type", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                    });
+                    return;
                 }
-                extractedContent = extractedText.toString().trim();
-                int charCount = extractedContent.length();
-                documentFile = DocumentFile.fromSingleUri(this, selectedFileUri);
-                fileName = documentFile.getName();
 
                 runOnUiThread(() -> {
-                    fileTypeButton.setText(fileExtension);
-                    pagesTV.setText("Pages: " + pageCount);
-                    totalCharsTV.setText("Total Characters: " + charCount);
-                    if (charCount == 0) {
-                        Snackbar s = Snackbar.make(constraintLayout, getString(R.string.incorrect_file_warning), Snackbar.LENGTH_INDEFINITE);
-                        s.setAction("Got it", view -> s.dismiss());
-                        s.setTextMaxLines(6);
-                        s.show();
-                    }
-                    String charLimitStr = tinyDB.getString(Constants.getCharLimitKey());
-                    int charLimit = charLimitStr.isEmpty() ? Integer.parseInt(Constants.DEFAULT_CHAR_LIMIT) : Integer.parseInt(charLimitStr);
-                    if (charCount > charLimit) {
-                        splittingTV.setText("Splitting: " + (int)(Math.ceil((double)charCount / charLimit)) + " parts");
-                        splittingCardView.setVisibility(View.VISIBLE);
-                    } else {
-                        splittingTV.setText("Splitting: No splitting required");
-                    }
-                    questionFileTextInputEditText.setText(fileName);
+                    // Update UI elements
                     fileNameTV.setText("Filename: " + fileName);
-                    fileTypeTV.setText("File Type: " + documentFile.getType());
+                    fileTypeTV.setText("File Type: " + fileExtension);
+                    questionFileTextInputEditText.setText(fileName);
+                    dialog.dismiss();
                 });
-                runOnUiThread(dialog::dismiss); // Dismiss the dialog upon completion
-            } catch (NullPointerException e) {
-                runOnUiThread(() -> Toast.makeText(this, "One or more attributes of file are null", Toast.LENGTH_SHORT).show());
-                e.printStackTrace();
-            } catch (IOException e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error reading the PDF", Toast.LENGTH_SHORT).show());
-                throw new RuntimeException(e);
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    Log.e (TAG, "Error extracting content: " + e.getMessage());
+                    Toast.makeText(this, "Error extracting content", Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                });
             }
         });
     }
 
-    private PdfReader setPdfReader() throws IOException {
+    private void extractPdfContent() {
         try {
-            contentResolver = getContentResolver();
-            inputStream = contentResolver.openInputStream(selectedFileUri);
-            if (inputStream != null) {
-                return new PdfReader(inputStream);
-            } else {
-                Toast.makeText(this, "Could not open the document to read contents", Toast.LENGTH_SHORT).show();
+            reader = new PdfReader(inputStream);
+            StringBuilder pdfContent = new StringBuilder();
+            for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                pdfContent.append(PdfTextExtractor.getTextFromPage(reader, i));
             }
+            extractedContent = pdfContent.toString();
+            reader.close();
         } catch (IOException e) {
-            e.printStackTrace();
-            throw e;
+            Log.e(TAG, "Error reading PDF: " + e.getMessage());
         }
-        return null;
+    }
+
+    private void extractExcelContent() {
+        try {
+            Workbook workbook;
+            if (fileExtension.equalsIgnoreCase("XLSX")) {
+                workbook = new XSSFWorkbook(inputStream);
+            } else {
+                workbook = new HSSFWorkbook(inputStream);
+            }
+            StringBuilder excelContent = new StringBuilder();
+            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+                Sheet sheet = workbook.getSheetAt(i);
+                for (Row row : sheet) {
+                    for (Cell cell : row) {
+                        switch (cell.getCellType()) {
+                            case STRING:
+                                excelContent.append(cell.getStringCellValue()).append(" ");
+                                break;
+                            case NUMERIC:
+                                excelContent.append(cell.getNumericCellValue()).append(" ");
+                                break;
+                            case BOOLEAN:
+                                excelContent.append(cell.getBooleanCellValue()).append(" ");
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    excelContent.append("\n");
+                }
+            }
+            extractedContent = excelContent.toString();
+            workbook.close();
+        } catch (IOException e) {
+            Log.e(TAG, "Error reading Excel: " + e.getMessage());
+        }
+    }
+
+    private void extractCSVContent() {
+        try (CSVReader csvReader = new CSVReader(new InputStreamReader(inputStream))) {
+            StringBuilder csvContent = new StringBuilder();
+            String[] nextLine;
+            while ((nextLine = csvReader.readNext()) != null) {
+                for (String cell : nextLine) {
+                    csvContent.append(cell).append(" ");
+                }
+                csvContent.append("\n");
+            }
+            extractedContent = csvContent.toString();
+        } catch (IOException | CsvValidationException e) {
+            Log.e(TAG, "Error reading CSV: " + e.getMessage());
+        }
+    }
+
+    private void extractTextContent() {
+        try (InputStreamReader reader = new InputStreamReader(inputStream)) {
+            StringBuilder textContent = new StringBuilder();
+            int data;
+            while ((data = reader.read()) != -1) {
+                textContent.append((char) data);
+            }
+            extractedContent = textContent.toString();
+        } catch (IOException e) {
+            Log.e(TAG, "Error reading text file: " + e.getMessage());
+        }
     }
 }

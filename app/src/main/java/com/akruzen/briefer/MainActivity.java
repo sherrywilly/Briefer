@@ -44,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
     ScrollView scrollView;
     AlertDialog addContentAlertDialog;
 
-    public void onFABClicked (View view) {
+    public void onFABClicked(View view) {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         builder.setView(R.layout.add_content_dialog);
         addContentAlertDialog = builder.create();
@@ -65,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
         openFileLauncher.launch(intent);
     }
 
-    public void infoButtonClicked (View view) {
+    public void infoButtonClicked(View view) {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         builder.setTitle("About");
         builder.setMessage(getString(R.string.about_app));
@@ -79,17 +79,17 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    public void helpButtonClicked (View view) {
+    public void helpButtonClicked(View view) {
         Intent intent = new Intent(this, HelpActivity.class);
         startActivity(intent);
     }
 
-    public void aboutButtonClicked (View view) {
+    public void aboutButtonClicked(View view) {
         Intent intent = new Intent(this, AboutActivity.class);
         startActivity(intent);
     }
 
-    public void settingsButtonClicked (View view) {
+    public void settingsButtonClicked(View view) {
         Intent intent = new Intent(this, SettingsActivity.class);
         startActivity(intent);
     }
@@ -193,6 +193,10 @@ public class MainActivity extends AppCompatActivity {
                                 fileExtension = "PDF";
                             } else if (fileType == Constants.FILE_TYPE_TXT) {
                                 fileExtension = "TXT";
+                            } else if (fileType == Constants.FILE_TYPE_XLSX) {
+                                fileExtension = "XLSX";
+                            } else if (fileType == Constants.FILE_TYPE_CSV) {
+                                fileExtension = "CSV";
                             } else if (fileType == Constants.FILE_TYPE_UNKNOWN) {
                                 fileExtension = "Unknown";
                             }

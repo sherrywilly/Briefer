@@ -36,6 +36,10 @@ public class Methods {
                 return Constants.FILE_TYPE_PDF;
             } else if (fileExtension.equalsIgnoreCase("txt")) {
                 return Constants.FILE_TYPE_TXT;
+            } else if (fileExtension.equalsIgnoreCase("xls") || fileExtension.equalsIgnoreCase("xlsx")) {
+                return Constants.FILE_TYPE_XLSX;
+            } else if (fileExtension.equalsIgnoreCase("csv")) {
+                return Constants.FILE_TYPE_CSV;
             }
             return Constants.FILE_TYPE_UNKNOWN;
         }
